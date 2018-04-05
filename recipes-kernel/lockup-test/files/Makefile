@@ -1,4 +1,4 @@
-obj-m := softlockup-test.o
+obj-m := lockup-test.o
 
 SRC := $(shell pwd)
 
