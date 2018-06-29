@@ -6,16 +6,23 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 /* module parameters */
-static int hard = 0;
+#define HARD_DEFAULT (0)
+static int hard = HARD_DEFAULT;
 module_param(hard, int, 0);
 MODULE_PARM_DESC(hard, "Generate hard lock-up, default="
-                 __MODULE_STRING(hard));
+                 __MODULE_STRING(HARD_DEFAULT));
 
-static int locksec = 60;
+#define LOCKSEC_DEFAULT (60)
+static int locksec = LOCKSEC_DEFAULT;
 module_param(locksec, int, 0);
-MODULE_PARM_DESC(hard, "Duration of lockup (seconds) , default="
-                 __MODULE_STRING(locksec));
+MODULE_PARM_DESC(locksec, "Duration of lockup (seconds) , default="
+                 __MODULE_STRING(LOCKSEC_DEFAULT));
 
+#define ONCPU_DEFAULT (0)
+static int oncpu = ONCPU_DEFAULT;
+module_param(oncpu, int, 0);
+MODULE_PARM_DESC(oncpu, "Generate lock-up on cpu, default="
+                 __MODULE_STRING(ONCPU_DEFAULT));
 
 struct task_struct *task;
 static spinlock_t spinlock;
@@ -92,14 +99,23 @@ int soft_lockup_task(void *arg)
 
 static int lockup_init(void)
 {
-	pr_info("Lockup duration = %d", locksec);
+	pr_info("Lockup duration = %d\n", locksec);
+	pr_info("Lockup on cpu %d\n", oncpu);
 	spin_lock_init(&spinlock);
 	if (hard) {
 		pr_info("Starting hard-lockup-test kthread\n");
-		task = kthread_run(&hard_lockup_task,NULL,"hard-lockup-test");
+		task = kthread_create(&hard_lockup_task,
+				      NULL,
+				      "hard-lockup-test%u");
+		kthread_bind(task, oncpu);
+		wake_up_process(task);
 	} else {
 		pr_info("Starting soft-lockup-test kthread\n");
-		task = kthread_run(&soft_lockup_task,NULL,"soft-lockup-test");
+		task = kthread_create(&soft_lockup_task,
+				      NULL,
+				      "soft-lockup-test%u");
+		kthread_bind(task, oncpu);
+		wake_up_process(task);
 	}
 
 	return 0;
