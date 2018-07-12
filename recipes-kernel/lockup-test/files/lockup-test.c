@@ -10,19 +10,19 @@
 /* module parameters */
 #define HARD_DEFAULT (0)
 static int hard = HARD_DEFAULT;
-module_param(hard, int, 0);
+module_param(hard, int, 0660);
 MODULE_PARM_DESC(hard, "Generate hard lock-up, default="
                  __MODULE_STRING(HARD_DEFAULT));
 
 #define DURATION_DEFAULT (60)
 static int duration = DURATION_DEFAULT;
-module_param(duration, int, 0);
+module_param(duration, int, 0660);
 MODULE_PARM_DESC(duration, "Duration of lockup (seconds) , default="
                  __MODULE_STRING(DURATION_DEFAULT));
 
 #define ONCPU_DEFAULT (0)
 static int oncpu = ONCPU_DEFAULT;
-module_param(oncpu, int, 0);
+module_param(oncpu, int, 0660);
 MODULE_PARM_DESC(oncpu, "Generate lock-up on cpu, default="
                  __MODULE_STRING(ONCPU_DEFAULT));
 
@@ -37,6 +37,7 @@ int hard_lockup_task(void *arg)
 
 	pr_info("jiffies=%u (ms)\n", jiffies_to_msecs(jiffies));
 
+	/* disable kernel pre-emption */
 	spin_lock(&spinlock);
 
 	/* We can't rely on jiffies to be incremented with interrupts disabled.
@@ -54,11 +55,16 @@ int hard_lockup_task(void *arg)
 	loopsperms = loops / 1000;
 	pr_info("loops per ms %lu\n",loopsperms);
 
+	/* hard lock-up means executing in kernel mode with interrupts 
+	   disabled */
 	local_irq_save(flags);
 	spin_lock(&spinlock);
 
 	loops = elapsedms = 0;
 	stop = jiffies + msecs_to_jiffies(duration*1000);
+
+	/* As jiffies may not be updated whilst in the hard-lockup,
+	   elapsedms < duration*1000 is the expected way out of the loop */
 	while(!kthread_should_stop() && (elapsedms < duration*1000)
 	      && time_before(jiffies, stop)) {
 		cpu_relax();
@@ -86,6 +92,8 @@ int soft_lockup_task(void *arg)
 	pr_info("jiffies=%u (ms)\n", jiffies_to_msecs(jiffies));
 	stop = jiffies + msecs_to_jiffies(duration*1000);
 
+	/* Taking a spinlock disables kernel pre-emption, which is what we wish
+	   to achieve here */
 	spin_lock(&spinlock);
 
 	while(!kthread_should_stop() && time_before(jiffies, stop)) {
@@ -120,6 +128,9 @@ static ssize_t start_store(struct kobject *kobj, struct kobj_attribute *attr,
 	if (mutex_trylock(&running) == 0) {
 		return -EBUSY;
 	}
+
+	pr_info("Lockup duration = %d\n", duration);
+	pr_info("Lockup on cpu %d\n", oncpu);
 
 	/* ignore data and start test */
 	if (hard) {
@@ -160,8 +171,6 @@ static int lockup_init(void)
 		pr_err("failed to create the file /sys/kernel/lockup-test/start\n");
 	}
 
-	pr_info("Lockup duration = %d\n", duration);
-	pr_info("Lockup on cpu %d\n", oncpu);
 	pr_info("Write to /sys/kernel/lockup-test/start to trigger lock-up\n");
 
 	return 0;
